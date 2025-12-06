@@ -1,0 +1,193 @@
+---
+title: "Evaluacion_Modulo3"
+author: "Leslie Sarai Ventura Perez"
+date: '2022-06-10'
+output:
+  word_document: default
+  html_document: default
+---
+
+    Dataset: datos_mexico.csv
+    
+    Caracteristicas: Este dataset fue obtenido de la base de datos del Banco Mundial el 09 de junio     de 2022. Contiene datos sobre algunos indicadores economicos de Mexico desde 1970 hasta 2020.
+
+
+En esta actividad se desarrollara un modelo de **regresion lineal multivariado**, en el cual se intentara explicar el IPC en Mexico, con base en las siguientes variables:
+
+    MM = Masa Monetaria en Unidades Monetarias Nacionales constantes constantes u Oferta Monetaria
+    PIB = PIB anual en UMN constantes
+    INF = Inflacion anual
+    IED = Inversion Extranjera Directa en UMN actuales
+
+**Cargamos las librerias**
+```{r, label = librerias}
+library(forecast)
+library(lmtest) #para contraste durbin watson.
+library(nlme)
+library(sandwich)
+library(car)
+library(ggplot2)
+library(openxlsx)
+library(reshape)   # Para renombrar variables
+library(dynlm)
+library(GGally)
+```
+
+
+### **Cargamos la base de datos**
+
+```{r, label = Cargar_datos}
+data <- read.csv(file.choose())
+```
+
+**Visualizamos los datos**
+```{r, label = Resumen}
+str(data)
+```
+
+
+Cambiamos el nombre de la primera variable para que sea solo "ANIO"
+```{r, label = "Cambiar nombre a variable"}
+data <- rename(data, c(ï..ANIO="ANIO")) 
+data
+```
+
+**Creamos el modelo**
+```{r, label = Attach}
+attach(data)  # Para facilitar el acceso a las variables
+```
+
+```{r, label = modelo1}
+modelo <- lm(IPC ~ MM + PIB + INF + IED, data=data)
+summary(modelo)
+```
+
+El modelo parece ser muy bueno debido a la alta significancia de todas las variables y de su R2 igaul a 0.97, no obstante es mejor descartar la presencia de algun problema en los datos que interfiera con el resultado,
+
+**Comprobaremos si existe algun problema de autocorrelacion:**
+```{r, label = Comprobar_Auto}
+plot(modelo$residuals, type = "b")
+
+```
+
+```{r, label = Qplot}
+qplot(x=c(tail(modelo$residuals,-1),0),
+      y=modelo$residuals)
+```
+
+
+Los graficos muestran ciertos patrones, lo cual podemos interpretar como la prueba inicial de la existencia de autocorrelacion.
+
+Pasaremos a realizar test estadisticos para confirmar lo anterior.
+
+**Aplicando el Test de Durbin-Watson**
+
+Este test nos devuelve un valor p, el cual indica que rechazaremos la hipotesis nula si es significativo  (< 0.5)
+
+Las hipotesis son las siguientes:
+
+Ho = No autocorrelacion
+H1 = Autocorrelacion
+
+```{r, label = Durbin-Watson}
+dwtest(modelo)
+```
+Con base en lo anterior (p-value menor a 0.05), confirmamos la existencia de autocorrelacion.
+
+**Procederemos a atenuarla utilizando el metodo de Errores estandar libres de autocorrelacion**
+
+```{r, label=Atenuar_Autocorrelacion}
+#coeftest(modelo, vcov = NeweyWest(modelo))
+#summary(modelo)
+```
+
+Vemos que no es posible atenuar la autocorrelacion debido a que ciertas variables estan presentando una combinacion lineal igual a una constante. Por lo anterior, en este caso, podemos considerar normal la presencia de autocorrelacion por la naturaleza de las variables.
+
+**Comprobaremos si hay problema de multicolinealidad**
+
+Graficamos los residuos
+
+````{r, label = Grafica_Residuos}
+cor(data [2:5],use="complete.obs")
+pairs(data[2:5])
+ggpairs(data[2:5])
+````
+
+El grafico demuestra una alta correlacion entre las variables IPC y PIB, asi como tambien entre el IPC y la oferta monetaria (MM), lo cual podemos obviarlo basandonos en la teoria economica, no obstante, trataremos de atenuarlo y comprobar el comportamiento de los nuevos resultados.
+
+
+#### **Obtenemos el factor de inflación de la varianza**
+
+````{r, label = VIF_Inicial}
+vif(modelo)
+````
+
+Observamos que los VIF son moderadamente altos, lo que, aunado a los valores obtenidos en el grafico de arriba, se traduce en un problema de multicolinealidad.
+
+
+#### **Procederemos a eliminar este problema a través de un analisis de componentes principales**
+
+````{r, label = PCA}
+x <- data.frame(data$MM,data$PIB, data$INF, data$IED)
+summary(x)
+cor(x)
+
+
+macp1 <- princomp(x, 
+                  scores=TRUE, 
+                  cor=TRUE)
+summary(macp1)
+````
+
+**Scores of the components**
+
+`````{r, label = Scores_PCA}
+macp1$scores[1:10,]
+score <- data.frame(macp1$scores)
+score
+````
+
+Tengamos en cuenta que:
+
+    Comp.1 = MM
+    Comp.2 = PIB
+    Comp.3 = INF
+    Comp.4 = IED
+    
+
+```{r, label = Modelo_2}
+modelo2<-lm(IPC ~ score$Comp.1 + score$Comp.2 + score$Comp.3 + score$Comp.4 )
+summary(modelo2)
+vif(modelo2)    # VIF final
+
+```
+
+
+Podemos ver que la variable IED (Inversion extranjera directa) se volvio no relevante para explicar el IPC. Ademas, tenemos un R2 igual a 0.9771, lo que significa que nuestro modelo puede explicar casi en su totalidad la variacion en el IPC. 
+
+Por otro lado, los valores de VIF se han convertido en 1, lo cual indica que tenemos un buen modelo libre de multicolinealidad.
+
+En resumen, podemos afirmar lo siguiente:
+
+- El aumento de 1 unidad en el IPC, implica que la oferta monetaria incremento en 28.6 unidades. Esto es algo esperado debido a que una mayor liquidez implica mayor demanda de productos, por lo cual los precios tienden al alza.
+
+- Por cada unidad de incremento en el IPC, el PIB incrementara 2 unidades, sin embargo, el PIB solo explica el incremento del IPC en un nivel de significancia del 90%
+
+- El incremento en 11.35 unidades en la inflacion, explicara el incremento de 1 unidad del IPC.
+Sabemos que el nivel de inflacion es calculado con base en el IPC, eso explica la alta significancia que muestra esta variable para el modelo.
+
+- Por cada unidad que el IPC incremente, la inversion extranjera disminuira en 5.5 unidades con una desviacion estandar de +- 4 unidades. Considerando ese amplio rango de desviacion estandar, a comparacion con el resto de variables. y que no es relevante para el modelo, lo mas conveniente seria eliminarla.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

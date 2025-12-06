@@ -1,0 +1,691 @@
+---
+title: "ESPECIALIZACION EN R - EXAMEN MODULO"
+author: "Leslie Sarai Ventura Perez"
+date: "12/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# establecer el directorio
+ library(knitr)
+opts_chunk$set(echo=TRUE)
+opts_knit$set(root.dir = "C:/Users/estre/Documents/Especializacion_R/Basico/S09-Examen")
+```
+
+```{r}
+#knitr::include_graphics("PortadaR.png")
+```
+
+# ***Parte 1. Desarrollar un análisis exploratorio (7 puntos)***
+
+
+***Objetivo:***
+***Conocer los datos y visualizarlos de tal manera que permitan extraer insights iniciales.*** 
+
+Dataset: titanic.csv
+
+Este es un conjunto de datos clásico utilizado en muchos tutoriales y demostraciones de minería 
+de datos, perfecto para el análisis exploratorio y la construcción de modelos de clasificación 
+binaria para predecir la supervivencia.
+
+Los datos solo cubren a los pasajeros, no a la tripulación.
+
+***Información de atributos***
+
+- survived - Sobreviviente (0 = No; 1 = Yes)
+
+- class - Clase de Pasajeros (1 = 1st; 2 = 2nd; 3 = 3rd)
+
+- name - Nombre
+
+- sex - Genero
+
+- age - Edad
+
+- sibsp - Número de hermanos / cónyuges en el extranjero
+
+- parch - Número de padres / hijos a bordo
+
+- ticket - Numero de pasaje
+
+- fare - Tarifa de pasajero
+
+- cabin - Cabina
+
+- embarked - Puerto de embarque (C = Cherbourg; Q = Queenstown; S = Southampton)
+
+- boat - Bote salvavidas (si sobrevivió)
+
+- body - Número de cuerpo (si no sobrevivió y el cuerpo fue recuperado)
+
+
+```{r}
+titanic_df <- read.csv("titanic.csv")
+```
+
+Seleccionamos las variables de utilidad
+```{r}
+library(dplyr)
+titanic_df <- select(titanic_df, pclass, survived, sex, age)
+str(titanic_df)
+```
+
+
+
+Observamos la cantidad de datos faltantes.
+```{r}
+library(VIM)
+
+vacio=aggr(titanic_df,numbers=T)
+```
+```{r}
+colSums(is.na(titanic_df))
+which(rowSums(is.na(titanic_df))>1)
+which(rowSums(is.na(titanic_df))>2)
+titanic_df <- titanic_df[-1310,]
+```
+
+```{r}
+titanic_df$survived <- factor(titanic_df$survived, labels = c("No", "Si"))
+#labels = c("1st", "2nd", "3rd")
+titanic_df$sex <- factor(titanic_df$sex, labels = c("Mujer", "Hombre"))
+titanic_df$age <- as.integer(titanic_df$age)
+```
+
+```{r}
+str(titanic_df)
+```
+
+Dado que son bastantes los datos faltantes, especialmente en la variable de edad, de momento quitamos los datos faltantes para tener un panorama de la distribución de los datos.
+```{r}
+titanic_df_filtrado <- filter(titanic_df, !is.na(titanic_df$age))
+```
+
+
+```{r}
+#Gráficos exploratorios rápidos. Borrarlos antes de entregar
+#attach(titanic_df)
+#plot(x =pclass)
+#plot(x = survived)
+#plot(x = sex)
+#plot(x = embarked) # con esta variable se podría hacer una exploración para ver en qué puerto predominaba determinada pclass. Actualización: quizá salga sobrando.
+```
+**Visualizar la distribucion de los sobrevivientes.**
+
+Librerias necesarias para el analisis exploratorio.
+```{r include=FALSE}
+pacman::p_load(tidyverse, skimr, GGally, plotly, viridis, caret, randomForest, rpart, 
+               ggcorrplot, rpart.plot, corrgram, lightgbm, ggplot2, highcharter,ggthemes,  psych, scales, treemap, treemapify, repr, cowplot, magrittr, ggpubr, RColorBrewer, plotrix, ggrepel, forcats, reshape2, caTools, tree, rattle)
+```
+
+1. Explorar la distribución por sobrevivencia
+```{r}
+
+options(repr.plot.width=8, repr.plot.height=4)
+
+sobreviv_num <- titanic_df_filtrado %>% group_by(survived) %>% summarise(Count=n()) %>%
+    ggplot(aes(x=survived, y=Count)) + geom_bar(stat="identity", fill= "darkorange1", color="black") + theme_light()  + 
+    geom_text(aes(x= survived, y=0.01, label= Count),
+             hjust=0.5, vjust=-3, size=4,   
+              colour="black", fontface="bold") +
+                labs(title="Sobrevivientes en número", x="Sobrevivieron", y="Cantidad") +  
+                 theme(plot.title=element_text(hjust=0.5),                                                        text = element_text(size = 12))
+  
+  
+sobreviv_porc <- titanic_df_filtrado %>% group_by(survived) %>% summarise(Count=n()) %>% 
+    mutate(pct=round(prop.table(Count),2) * 100) %>% 
+    ggplot(aes(x=survived, y=pct)) + geom_bar(stat="identity", fill = "dodgerblue", color="black") + 
+    geom_text(aes(x=survived, y=0.01, label= sprintf("%.2f%%", pct)),
+              hjust=0.5, vjust=-3, size=4, 
+              colour="black", fontface="bold") + theme_bw() + labs(x="Sobrevivieron", y="Porcentaje") + 
+    labs(title="Sobrevivientes en porcentaje") + theme(plot.title=element_text(hjust=0.5),
+                                                 text = element_text(size = 12))
+  
+plot_grid(sobreviv_num,sobreviv_porc, align="h", ncol=2)
+  
+```
+2. Explorar los datos por género y edad.
+
+```{r}
+
+titanic_df_filtrado%>% summarise(mean=round(mean(age),2))
+titanic_df_filtrado%>% group_by(sex) %>% summarise(mean=round(mean(age),2))
+
+#Veamos como se visualiza por género y de manera general.
+ 
+options(repr.plot.width=8, repr.plot.height=6) 
+  
+genero.dist <- titanic_df_filtrado %>% select(sex, age) %>% filter(sex == 'Hombre' | sex== "Mujer") %>%
+    filter(!is.na(age)) %>% group_by(sex) %>% 
+    ggplot(aes(x=age)) + geom_density(aes(fill=sex), alpha=0.5, show.legend=FALSE) + facet_wrap(~sex) + theme_minimal() + 
+    geom_vline(aes(xintercept=mean(age)),
+               color="red", linetype="longdash", size=0.5) + labs(title="Distribucion por edad") + theme(plot.title=element_text(hjust=0.5),                                                                                           text = element_text(size = 14))
+genero.dist  
+
+distribucion.general <- titanic_df_filtrado%>% select(sex, age) %>% filter(!is.na(age)) %>% 
+    ggplot(data=titanic_df_filtrado, mapping=aes(x=age)) + geom_density(color="darkblue", fill="lightblue") + 
+    geom_vline(aes(xintercept=mean(age)),
+               color="red", linetype="dashed", size=1) +  theme_minimal() + labs(x="Edad general") + theme(text = element_text(size = 14)) 
+  
+distribucion.general
+
+plot_grid(genero.dist, distribucion.general, nrow=2)  
+  
+```
+Como el grafico demuestra, la distribucion de las edades de los pasajeros a bordo del Titanic eran muy similares tanto en varones como en mujeres, lo cual concluye con una distribucion promedio igualmente similar.
+
+3. Distibución de sobrevivientes por clase.
+
+Class: 1= 1st, 2= 2nd, 3=3rd
+
+```{r}
+options(repr.plot.width=8, repr.plot.height=6) 
+
+# Boxplot con survived en el "eje x" y class en el "eje y"
+box.survived <- titanic_df_filtrado %>% select(survived, pclass, sex) %>% 
+    ggplot(aes(x=survived, y=pclass, fill=survived)) + geom_boxplot(color="black") + theme_minimal() + facet_wrap(~sex) + 
+    scale_fill_manual(values=c("#FA5858", "#9FF781")) + theme(text = element_text(size = 14))
+  
+box.survived
+# Distribucion de pclass
+dist.pclass <- titanic_df_filtrado %>% select(pclass) %>%
+    ggplot(aes(x=pclass)) + geom_density(color="#013ADF", fill="#81BEF7", trim=TRUE) + theme_tufte() + xlim(range(c(1,3))) + theme(text = element_text(size = 14))
+  
+plot_grid(box.survived, dist.pclass, nrow=2) 
+
+
+```
+A primera vista, podemos ver que la mayoría de pasajeros eran de 3a clase. Luego, había casi la misma cantidad de pasajeros de 1a y de 2a clase, predominando ligeramente la cantidad de pasajeros de primera clase.
+Respecto a los sobrevivientes, observamos que la mayoría de las mujeres sobrevivieron, no obstante, hubo algunas pocas de primera y de segunda clase que no lograron sobrevivir, y una cantidad un poco mayor de mujeres de tercera clase que tampoco lo lograron. Cabe recalcar que de las mujere que sobrevivieron, el 75% de ellas pertenecían a primera clase.
+Por otro lado, vemos que hubo una cantidad considerable de hombres que fallecieron, especialmente de hombres que vaijaban con un boleto de segunda y tercera clase, representando estos el 75% de los finados. En contraparte, encontramos una cantidad muy similar de hombres sobrevivientes de cada clase, sin embargo, eso no significa que las 3 clases hayan corrido con la misma suerte,ya que, como se mencionó al principio, es importante recordar que la proporción de poblaciones de primera y tercera clase son sumamente dispares, pues había casi el doble de personas viajando en 3a clase con respecto a la primera clase.
+
+
+
+Numero de sobrevivientes por clase
+```{r}
+options(repr.plot.width=10, repr.plot.height=10) 
+
+# Cuantas personas sobrevivieron por clase
+class.survived <- titanic_df_filtrado %>% group_by(pclass, survived) %>% summarise(amount=n(),.groups="keep") %>%
+  ggplot(aes(x=reorder(pclass,survived), y=amount, fill=survived)) + geom_bar(stat="identity", position="dodge") + theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 90), plot.title=element_text(hjust=0.5)) + scale_fill_manual(values=c("black", "lightblue")) + 
+  labs(title="Número de sobrevivientes \n
+por clase",x="Clase", y="Número de sobrevivientes")
+
+class.survived
+
+```
+Este gráfico comprueba lo expuesto anteriormente. Conforme la clase se hace más baja, disminuye considerablemente la proporción de sobrevivientes.
+
+
+# ***Parte 2. Identificar outliers y datos faltantes (5 puntos)***
+
+***Objetivo: identificar outliers e implementar el tratamiento e imputación de datos***
+
+***Dataset: titanic.csv***
+
+
+**2.1 Identificación de outliers**
+
+```{r include=FALSE}
+library(dplyr)
+library(stats)
+```
+
+```{r}
+as.data.frame(titanic_df)
+```
+
+
+```{r}
+#Edad
+par(mfrow=c(1,2))
+plot(titanic_df$age, main= "Edad")
+boxplot(titanic_df$age, main= "Edad")
+
+summarise(titanic_df,medianAge=median(age, na.rm = T), minAge= min(age,na.rm = T), maxAge= max(age,na.rm = T))
+cuantilesAge <-quantile(titanic_df$age,c(0.25,0.5,0.75), type=7,na.rm = T )
+
+cuantilesAge
+```
+
+
+
+```{r}
+bp=boxplot(titanic_df$age, main ="Age")
+
+out_inf=bp$stats[1]
+cat("Extremo inferior", out_inf)
+```
+
+```{r}
+out_sup=bp$stats[5]
+cat("Extremos superior",out_sup)
+
+```
+ 
+```{r}
+#Valores de outliers encontrados.
+
+bp$out
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+boxplot(age ~ sex, data= titanic_df, main = "Edad según sexo", col= c("orange3", "yellow3", "green3"))
+
+```
+```{r}
+
+#which(titanic_df$age==67)
+
+titanic_df$age[10] <- NA
+titanic_df$age[136] <- NA
+titanic_df$age[728] <- NA
+titanic_df$age[82] <- NA
+titanic_df$age[507] <- NA
+titanic_df$age[1236] <- NA
+titanic_df$age[62] <- NA
+titanic_df$age[15] <- NA
+titanic_df$age[286] <- NA
+
+
+ 
+```
+
+
+
+
+
+**Identificación usando métodos de distancia**
+**Método LOF**
+
+```{r include=FALSE}
+
+library(Rlof)
+
+```
+
+```{r}
+dx<-titanic_df
+dx<-dx[!is.na(dx$age),]
+```
+
+
+```{r}
+dx$score<-lof(dx[,4],k=3)
+plot(dx$score)
+
+umbral<-2
+dx$outlier<-(dx$score>umbral)
+dx<-na.omit(dx)
+
+```
+
+**3. Distance Cooks**
+
+```{r}
+dcl<-as.data.frame(titanic_df)[,-c(5,6)]
+str(dcl)
+
+```
+
+```{r}
+mod<-lm(titanic_df$age~ ., data= dcl)
+cooksdist<-cooks.distance(mod)
+
+```
+
+
+```{r}
+plot(cooksdist, pch="*", cex=2, main="Influential Obs by Cooks distance")
+abline(h = 4*mean(cooksdist, na.rm=T), col="red")  # add cutoff line
+text(x=1:length(cooksdist)+1, y=cooksdist, labels=ifelse(cooksdist>4*mean(cooksdist, na.rm=T),names(cooksdist),""), col="red")  # add label
+
+```
+Como el grafico amterior muestra, se tenien varias observaciones que superan 4 veces el valor de la media, especialmente las observaciones numero 169 y 285.
+
+
+Ahora desplegare las observaciones influyentes.
+```{r}
+influent<- as.numeric(names(cooksdist)[(cooksdist > 4*mean(cooksdist, na.rm=T))])  # influential row numbers
+head(dcl[influent, ],600) 
+
+```
+
+Al revisar detenidamente las observaciones influyentes, se puede ver que las dos que fueron clasificadas como de mayor influencia, carecen de datos en la variable embarked. 
+
+
+***Prueba de MCAR***
+
+Ho= MCAR   , se acepta la H0 si p>0.05 - p value no significativo
+H1<> MCAR  , se acepta la H1 si p<0.05 - p value significativo
+        
+
+Desarrollamos la prueba de Little MCAR de BaylorPsychEd para estimar la probabilidad de datos faltantes en titanic.csv
+
+```{r include=FALSE}
+#* A continuación, se muestra la reimplementación de la prueba de Little y una ejecución
+#*  de prueba para este dataframe  relativamente pequeñ y con pocas variables. 
+
+
+mcar <- function(x){ 
+  if(!require(norm)) {
+    stop("You must have norm installed to use LittleMCAR") 
+  } 
+  
+   if(!require(data.table)) {
+     stop("Please install the R-package data.table to use mcar")
+   }
+  
+  if(!(is.matrix(x) | is.data.frame(x))) {
+    stop("Data should be a matrix or dataframe")
+  }
+  
+  if (is.data.frame(x)){
+    x <- data.matrix(x)
+  }
+  
+  # delete rows of complete missingness
+  foo <- function(x) return(any(!is.na(x)))
+  dd <- apply(X = x, MARGIN = 1L, FUN = foo)
+  dd <- which(!dd, arr.ind = TRUE)
+  if(length(dd) > 0) 
+    x <- x[-dd,]
+  
+  # define variables        
+  n.var <- ncol(x) # number of variables
+  n <- nrow(x)  #number of respondents
+  var.names <- colnames(x)
+  r <- 1 * is.na(x)
+  
+  nmis <- as.integer(apply(r, 2, sum))  #number of missing data for each variable REWRITE
+  mdp <- (r %*% (2^((1:n.var - 1)))) + 1  #missing data patterns
+  x.mp <- data.frame(cbind(x,mdp)) # add column indicating pattern
+  colnames(x.mp) <- c(var.names,"MisPat") # set name of new column to MisPat
+  n.mis.pat <- length(unique(x.mp$MisPat)) # number of missing data patterns
+  p <- n.mis.pat-1 # number of Missing Data patterns minus 1 (complete data row)
+  
+  
+  s <- prelim.norm(x)
+  ll <- em.norm(s)
+  fit <- getparam.norm(s = s, theta = ll)
+  
+  # gmean<-mlest(x)$muhat #ML estimate of grand mean (assumes Normal dist)
+  gmean <- fit$mu
+  # gcov<-mlest(x)$sigmahat #ML estimate of grand covariance (assumes Normal dist)
+  gcov <- fit$sigma
+  colnames(gcov) <- rownames(gcov) <- colnames(x)
+  
+  #recode MisPat variable to go from 1 through n.mis.pat
+  x.mp$MisPat2 <- rep(NA,n)
+  for (i in 1:n.mis.pat){ 
+    x.mp$MisPat2[x.mp$MisPat == sort(unique(x.mp$MisPat), partial=(i))[i]]<- i 
+  }
+  
+  x.mp$MisPat<-x.mp$MisPat2
+  x.mp<-x.mp[ , -which(names(x.mp) %in% "MisPat2")]
+  
+  #make list of datasets for each pattern of missing data
+  datasets <- list() 
+  for (i in 1:n.mis.pat){
+    datasets[[paste("DataSet",i,sep="")]]<-x.mp[which(x.mp$MisPat==i),1:n.var]
+  }
+  
+  #degrees of freedom
+  kj<-0
+  for (i in 1:n.mis.pat){ 
+    no.na<-as.matrix(1* !is.na(colSums(datasets[[i]]))) 
+    kj<-kj+colSums(no.na) 
+  }
+  
+  df<-kj -n.var
+  
+  #Little's chi-square
+  d2<-0
+  cat("this could take a while")
+  
+  # this crashes at the missingness pattern where every column is missing
+  # this for-loop can be handled faster with plyr-function
+  for (i in 1:n.mis.pat){ 
+    mean <- (colMeans(datasets[[i]])-gmean) 
+    mean <- mean[!is.na(mean)] 
+    keep <- 1* !is.na(colSums(datasets[[i]])) 
+    keep <- keep[which(keep[1:n.var]!=0)] 
+    cov <- gcov 
+    cov <- cov[which(rownames(cov) %in% names(keep)) , which(colnames(cov) %in% names(keep))] 
+    d2 <- as.numeric(d2+(sum(x.mp$MisPat==i)*(t(mean)%*%solve(cov)%*%mean)))
+  }
+  
+  #p-value for chi-square
+  p.value<-1-pchisq(d2,df)
+  
+  #descriptives of missing data
+  amount.missing <- matrix(nmis, 1, length(nmis))
+  percent.missing <- amount.missing/n
+  amount.missing <- rbind(amount.missing,percent.missing)
+  colnames(amount.missing) <- var.names
+  rownames(amount.missing) <- c("Number Missing", "Percent Missing")
+  
+  list(chi.square = d2, 
+       df = df, 
+       p.value = p.value, 
+       missing.patterns = n.mis.pat, 
+       amount.missing = amount.missing, 
+       data = datasets)
+}
+```
+
+Usamos la función para realizar el test y revisar si se cumple el supuesto MCAR
+```{r}
+supuestoMCAR <-mcar(titanic_df)
+supuestoMCAR$p.value
+```
+Debido a que el p-value es menor a 0.05, consideraremos a la hipostesis nula como falsa. Esto significa que la causa de datos faltantes NO ES debido completamente al azar.
+
+Considerando el resultado, los datos faltantes podrían ser del tipo MAR, por lo cual, deberemos proceder a evaluar los patrones y así elegir la mejor opción para el tratamiento de los datos.
+
+
+```{r include=FALSE}
+library(mice)
+```
+
+```{r}
+
+md.pattern(titanic_df,plot = FALSE)
+
+```
+Como se observa, existen 272 datos faltantes en total, 263 faltantes en la data original más 9 que outliers que se convirtieron a NA´s para mejorar la calidad de la imputación, todos pertenecientes a la variable age.
+
+
+Ahora, se procederá a evaluar el outflux y el influx de cada variable para conocer cuales variables podrian ser usadas para imputar otras, teniendo en cuenta que outflux (flujo de salida) indica una utilidad peotencial, aunque no necesariamente real, para imputar otras variables.
+
+```{r}
+flux(titanic_df)
+fluxplot(titanic_df)
+```
+Como muestra el gráfico, la afluencia de la variable "age" es relativamente buena, por lo cual podría ser fácil de imputar.
+Por otro lado, vemos que todas las varibles se encuentran con un outflux igual a 1,razon por la cual se podria usar cualquiera para imputar age.
+
+
+**2a etapa: Identificación**
+
+A continuación, se desarrollará la identificación por fila y columna de los datos faltantes.
+
+
+Retomaré el primer gráfico para obtener la visualización de los patrones de datos faltantes.
+
+```{r}
+library(VIM)
+
+titanic_df_miss=aggr(titanic_df, numbers=TRUE)
+summary(titanic_df_miss)
+
+# Exploramos en columnas
+
+colmiss <- colSums(is.na(titanic_df))
+colmiss
+
+#exploramos en filas
+rowmiss <- rowSums(is.na(titanic_df))
+head(rowmiss,10)
+
+```
+
+Vemos que el 79.22% de los datos están completos, con una cantidad igual a 1046. Por otro lado, el ~20.78% de las observaciones (272) tienen sólo un dato faltante, que es el de la edad (age). 
+
+Ahora, seria conveniente revisar a detalle qué porcentaje representan estos datos faltante.
+```{r}
+
+porc_colmiss=100*colSums(is.na(titanic_df))/dim(titanic_df)[1]
+porc_colmiss
+
+
+porctotal_miss<- (263*100)/5236 # % que representa de toda la data  
+porctotal_miss
+
+# Ahora, a nivel de filas, veamos cuantos regitros se eliminarian si se optara por esa opcion.
+porctotal_reng_miss<- (263*100)/1309
+porctotal_reng_miss
+```
+Dado que los datos desconocidos representan un porcentaje elevado de filas (20.09%), no es viable proceder a eliminarlos; lo ideal sera imputarlos, especialmente si consideramos que representan el ~5% de toda la data, lo cual es un porcentaje aceptable para ese propósito.
+
+**3a etapa: Tratamiento por imputacion**
+
+Carga librerias necesarias
+```{r include=FALSE}
+library(DMwR2) 
+ library(dplyr)
+ library(ggcorrplot)
+library(mice)
+```
+
+
+Probemos con la mediana
+
+```{r}
+
+dimpcentral<-titanic_df
+head(titanic_df,10)
+
+```
+
+```{r}
+dimpcentralLimp<-centralImputation(dimpcentral)
+head(dimpcentralLimp,10)
+
+
+par(mfrow=c(1,1))
+plot(density(dimpcentral$age,na.rm = T),col=2,main="Edad")
+lines(density(dimpcentralLimp$age),col=5)
+
+
+```
+Utilizando este metodo, se aprecia una disparidad considerable entre el comportamiendo de los datos originales y el de los datos imputados con la mediana.
+
+Probemos usando regresión lineal
+```{r}
+dmice <- titanic_df
+```
+
+
+```{r}
+
+colna1<-c("pclass", "survived", "sex", "age")
+imputed_data1<-mice(dmice[,names(dmice) %in% colna1],m=1,maxit=1,method = "norm.predict",seed = 2021,print=F)
+#el operador %in% permite hacer el match entre los nombres de la data y los almacenados en el objeto colna.
+complete.data1<- mice::complete(imputed_data1)
+head(complete.data1,10)
+
+#adicionamos la variable monto al data set original
+
+dmice2<-dmice
+
+dmice2$age<-complete.data1$age
+
+```
+
+Veamoslo de manera gráfica
+
+```{r}
+ xyplot(imputed_data1, survived ~age)
+```
+
+```{r}
+#el resultado es lo mismo que el desarrollado en la imputación central.
+nums1 <- select_if(dmice2, is.numeric)
+
+ 
+corr1 <- round(cor(nums1), 2)
+
+ggcorrplot(corr1, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="square", 
+           colors = c("tomato2", "white", "#01A9DB"), 
+           title="Correlogram Marketing", 
+           ggtheme=theme_minimal()) 
+```
+
+```{r}
+#veamos en la distribución como se visualiza, comparando la imputación por regresión versus la data real
+par(mfrow=c(1,1))
+
+plot(density(dmice$age,na.rm = T),col=2,main="Edad")
+lines(density(complete.data1$age),col=3)
+
+```
+Utilizando imputacion por regresion, observamos que tampoco se logra un comportamiento similar 
+
+Por último, veamos si utiizando árboles de clásificación se obtiene un comportamiento más natural de los datos imputados.
+
+```{r}
+#dmice <- as.data.frame(read.csv("titanic.csv"))
+#dmice<- select(dmice, pclass, survived, sex, age)
+#dmice <- dmice[-1310,]
+#dmice$sex <- as.factor(dmice$sex)
+str(dmice)
+```
+
+
+```{r}
+#dmice$pclass<-as.factor(dmice$pclass)
+#dmice$age<-as.factor(dmice$age)
+#dmice$survived<-as.factor(dmice$survived)
+```
+
+```{r}
+colna2<-c("pclass", "survived", "sex", "age")
+imputed_darb<-mice(dmice[,names(dmice) %in% colna2], method = "cart",seed = 668,print=F)
+#el operador %in% permite hacer el match entre los nombres de la data y los almacenados en el objeto colna.
+complete.darb<- mice::complete(imputed_darb)
+head(complete.darb,100)
+
+```
+
+**Veamos en la distribución como se visualiza, comparando la imputación por árboles de clasificación y regresión versus la data real**
+```{r}
+
+par(mfrow=c(1,2))
+
+plot(density(dmice$age,na.rm = T),col=2,main="Edad Arboles")
+lines(density(complete.darb$age),col=3)
+
+plot(density(dmice$age,na.rm = T),col=2,main="Edad Regresión")
+lines(density(complete.data1$age),col=3)
+
+
+xyplot(imputed_darb,age~survived)
+
+```
+
+
+
+```{r}
+colSums(is.na(dimpcentralLimp))
+
+```
+
+
