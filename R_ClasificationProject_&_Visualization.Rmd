@@ -1,0 +1,477 @@
+---
+title: "Programa de Especialización en R para Ciencia de Datos"
+author: 'Docente: Cinthia Zavala'
+Student: Leslie Ventura
+date: "2021"
+output:
+  html_document: default
+subtitle: Intermedio - Laboratorio 01 - Jerárquicos y No Jerárquicos
+---
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo=TRUE)
+opts_knit$set(root.dir = "C:/Users/estre/Documents/Especializacion_R/Intermedio/Laboratorios/Lab01_Completo")
+
+```
+
+```{r}
+knitr::include_graphics("PortadaR.png")
+
+```
+
+
+#### **Caso: Situación demográfica de los departamentos de Lima**
+
+Este es un conjunto de datos demográficos de distritos del departamento de Lima.
+
+Dataset: distritos.sav
+
+_*Información de las características ( atributos o variables)*_
+
+1. distrito: nombre del distrito
+
+2. ocu_vivi: hogares en cada vivienda
+
+3. pobpjov: % de población en pueblos jóvenes
+
+4. sinelect: % de población sin electricidad
+
+5. sinagua: % de población sin agua
+
+6. pea1619: PEA entre 16 y 19 años
+
+7. pocprin: % de población de 6-19 con primaria incompleta
+
+8. peam 15: PEA menores de 15 años
+
+
+_*Actividades*_
+
+1.- Encontrar el número optimo de cluster's usando métodos jerárquicos
+
+2.- Encontrar el número optimo de cluster's usando métodos no jerárquicos
+
+### **Comienza actividad 1**
+
+***Cargar librería***
+
+```{r include=FALSE}
+library(haven)
+```
+
+***Cargar datos***
+
+```{r}
+
+distritos1 <-as.data.frame(read_sav("distritos.sav"))
+names(distritos1)
+
+```
+
+***Cambiar el nombre de las filas por la variable distrito.***
+
+```{r}
+nombres=distritos1[,1]
+distritos=distritos1[,-1]
+row.names(distritos)=nombres
+head(distritos)
+```
+
+
+***Cargar lbreria para comenzar el clustering jerarquico***
+
+```{r include=FALSE}
+
+library(cluster)
+
+```
+
+```{r}
+hc.average<- hclust(dist(scale(distritos)),method ="average")
+plot(hc.average,labels=distritos1[,1],main= "Enlace Promedio", xlab="",cex=.9)
+hclust1.1<-cutree(hc.average,k=2)
+rect.hclust(hc.average,2,border = "dodgerblue4")
+
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+agnes_average=agnes(scale(distritos),method="average")
+agnes_average
+plot(agnes_average)
+
+```
+
+Se observa que coeficiente aglomerativo arrojado con el metodo de promedio es bueno (0.75).
+
+**_Enlace Método de Ward_**
+
+```{r}
+hc.ward=hclust(dist(scale(distritos)), method="ward.D")
+plot(hc.ward, labels=distritos1[,1],main="Ward.D", xlab="", sub="", cex=.9)
+
+hclust.2 <- cutree(hc.ward,k=2)
+rect.hclust(hc.ward,2,border = "dodgerblue4")
+
+
+```
+
+```{r}
+agnes_ward =agnes(scale(distritos),method="ward")
+agnes_ward
+
+plot(agnes_ward)
+
+```
+
+A pesar de que el metodo Average habia arrojado un buen coeficiente de aglomeracion (0.75), se procedera a trabajar con el modelo arrojado por el metodo de Ward, debido a su coeficiente sumamente mejorado de 0.92.
+
+A continuacion se procedera a evaluar el numero ideal de clusters por medio del coeficiente de silueta.
+
+
+***Encontrar la matriz de distancias***
+
+```{r}
+dis.distritos=daisy(scale(distritos))
+```
+
+***Coeficiente de Silueta con 2 clústers***
+
+```{r}
+conglomerados2=cutree(hc.ward,2)
+plot(silhouette(conglomerados2,dis.distritos))
+
+```
+
+
+```{r}
+conglomerados3=cutree(hc.ward,3)
+plot(silhouette(conglomerados3,dis.distritos))
+
+```
+
+```{r}
+conglomerados4=cutree(hc.ward,4)
+plot(silhouette(conglomerados4,dis.distritos))
+
+```
+
+```{r}
+conglomerados5=cutree(hc.ward,5)
+plot(silhouette(conglomerados5,dis.distritos))
+
+```
+
+```{r}
+conglomerados6=cutree(hc.ward,6)
+plot(silhouette(conglomerados6,dis.distritos))
+
+```
+
+Dados los coeficientes de silueta obtenidos, se elegirán 2 clústers.
+
+```{r}
+
+hc.ward=hclust(dist(scale(distritos)), method="ward.D")
+plot(hc.ward, labels=distritos1[,1],main="Ward.D", xlab="", sub="", cex=.9)
+
+hclust.2 <- cutree(hc.ward,k=2)
+rect.hclust(hc.ward,2,border = "dodgerblue4")
+
+
+```
+
+
+#### **Clúster Jerárquico Divisivo**
+
+**DIANA**
+
+```{r}
+clus_diana<- diana(scale(distritos))
+
+clus_diana
+
+plot(clus_diana)
+rect.hclust(clus_diana,2,border = "dodgerblue4")
+
+```
+
+
+***Encontrar el número optimo con el coeficiente de silueta.***
+
+```{r}
+dis.distritos2=daisy(scale(distritos))
+```
+
+
+```{r}
+conglomerados_diana=cutree(clus_diana,2)
+plot(silhouette(conglomerados_diana,dis.distritos))
+
+```
+
+***Evaluar con 3 clústers como varia el coeficiente.***
+
+```{r}
+
+conglomerados_diana=cutree(clus_diana,3)
+plot(silhouette(conglomerados_diana,dis.distritos))
+
+```
+
+### **Considerando los resultados anteriores, se determina que el número ideal de clusters es 2.**
+
+
+## **Comienza actividad 2**
+
+***Cargar librerias***
+```{r include=FALSE}
+#cargar librerias
+library(tidyverse)  # Manipulación de datos
+library(cluster)    # Algoritmos de cluster
+library(factoextra) # Algoritmos de cluster y visualización
+library(gridExtra) # Visualización de datos
+```
+
+***Eliminar elementos nulos***
+```{r}
+distritos <- na.omit(distritos)
+```
+
+***Escalar los datos para eliminar sesgos derivados de la diferencia de escala***
+```{r}
+distritos <- scale(distritos) 
+head(distritos, 7)
+```
+
+***Calcular la Matriz de distancias por euclidean (default)***
+```{r}
+distancias <- get_dist(distritos) 
+```
+
+***Visualizar las similitudes de distancias entre los distritos***
+```{r}
+ 
+fviz_dist(distancias, gradient = list(low = "blue", mid = "white", high = "red"))
+
+```
+
+
+#### **Modelo Kmeans**
+
+```{r}
+
+k2 <- kmeans(distritos, centers = 2, nstart = 25)
+
+str(k2)
+```
+
+***Graficar los clusters***
+```{r}
+
+fviz_cluster(k2, data = distritos)
+```
+
+
+
+**EVALUAR DIFERENTES MODELOS**
+```{r}
+
+# Se prueba a realizar clusters con 2,3,4 y 5 grupos
+
+k3 <- kmeans(distritos, centers = 3, nstart = 25)
+k4 <- kmeans(distritos, centers = 4, nstart = 25)
+k5 <- kmeans(distritos, centers = 5, nstart = 25)
+
+# Se preparan los grupos para ser visualizarlos
+p1 <- fviz_cluster(k2, geom = "point", data = distritos) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point", data = distritos) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point", data = distritos) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point", data = distritos) + ggtitle("k = 5")
+
+# Visualizar los clusters con los diferentes grupos calculados
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+
+```
+
+Visualmente, el modelo que parece estar más separado es el de 2 clústeres (esquina superior izquierda).
+
+**OPTIMIZAR EL MODELO**
+
+**_1) Elbow Method_**
+
+***Fijar semilla***
+```{r}
+set.seed(123)
+```
+
+***Definir una función para calcular la suma total del cuadrado dentro de los grupos del cluster***
+```{r}
+wss <- function(k) {
+  kmeans(distritos, k, nstart = 10 )$tot.withinss
+}
+```
+
+***Definir el número de cluster a probar entre 1 y 15***
+```{r}
+num_clusters <- 1:15
+```
+
+***Extraer los valores de "wss" de los clusters***
+```{r}
+wss_values <- map_dbl(num_clusters, wss)
+```
+
+***Preparar visualización de los clusters***
+```{r}
+plot(num_clusters, wss_values,
+     type="b", pch = 18, frame = FALSE, 
+     xlab="Numero de clusters (K)",
+     ylab="Suma total de cuadrados dentro de los grupos")
+```
+
+Como se observa en el gráfico, el mayor decremento se observa en 2 clústeres.
+
+
+***Visualizar los resultados que comparan la suma total del cuadrado de las distancias existentes para cada cluster***
+
+```{r}
+
+fviz_nbclust(distritos, kmeans, method = "wss")
+```
+
+Al igual que el gráfico anterior, esete gráfico indica que el número óptimo de clústeres es 2.
+
+
+**_2) Average Silhouette Method_**
+ 
+Optimiza que cada elemento se encuadre lo mejor posible dentro de la silueta del grupo.
+El alto y ancho de las siluetas de los grupos es un buen indicador de la calidad del agrupamiento
+
+## ***Función para calcular el promedio de las siluetas***
+
+```{r}
+
+avg_sil <- function(k) {
+  km.res <- kmeans(distritos, centers = k, nstart = 25)
+  ss <- silhouette(km.res$cluster, dist(distritos))
+  mean(ss[, 3])
+}
+```
+
+***Definir el número de cluster a probar entre 2 y 15***
+```{r}
+k.values <- 2:15
+```
+
+***Extraemos la media de los valores calculados***
+```{r}
+avg_sil_values <- map_dbl(k.values, avg_sil)
+```
+
+***Visualizar los resultados para diferentes numeros de grupos***
+```{r}
+plot(k.values, avg_sil_values,
+     type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of clusters K",
+     ylab = "Average Silhouettes")
+```
+
+Al igual que Elbow method, Average Silhouettes indican que el mejor número de clústeres es 2.
+
+
+***Visualizar los resultados que comparan el gap existente para cada cluster***
+
+```{r}
+
+fviz_nbclust(distritos, kmeans, method = "silhouette")
+```
+
+
+De acuerdo con el gráfico, el numero optimo de clusters sigue siendo 2.
+
+
+**_3) Gap Statistic Method_**
+
+***Función que calcula el gap de cada elemento dentro del grupo utilizando la simulación de Monte Carlo.***
+```{r}
+
+gap_stat <- clusGap(distritos, FUN = kmeans, nstart = 25,
+                    K.max = 10, B = 50)
+```
+
+***Vizualizacion de los resultados obtenidos por la funcion anterior***
+
+```{r}
+
+print(gap_stat, method = "firstmax")
+```
+
+
+***Visualizar los resultados que comparan el gap existente para cada cluster***
+
+```{r}
+fviz_gap_stat(gap_stat)
+```
+
+De forma similar que los métodos anteriores, el método Gap indica que el número ótimo de clústeres es 2.
+
+
+## **CLUSTER RESULTANTE TRAS OPTIMIZAR EL MODELO**
+
+***Se visualiza el cluster que optimiza el número de grupos***
+```{r}
+final <- kmeans(distritos, 2, nstart = 25)
+```
+
+***Se muestran las características propias del cluster generado***
+```{r}
+print(final)
+```
+Con lo anterior, se observa que el modelo está explicando el 55% de la variabilidad de los datos. No es muy bueno en realidad, pero es utilizable. Se podría mejorar si se incrementara el número de datos.
+
+
+***Visualizamos los resultados del cluster óptimo***
+```{r}
+fviz_cluster(final, data = distritos)
+```
+
+
+***Visualizar los puntos medios por cada una de las 4 variables para cada uno de los 4 grupos***
+```{r}
+distritos1 %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+```
+
+***Generamos una nueva copia para almacenar los grupos.***
+```{r}
+data_agrupada<- distritos1
+
+data_agrupada$grupos<-final$cluster
+
+head(data_agrupada)
+
+```
+
+**Otros Algoritmos**
+
+**_PAM_**
+
+```{r}
+pam_2<-pam(distritos,2)
+pam_3<-pam(distritos,3)
+pam_4<-pam(distritos,4)
+pam_5<-pam(distritos,5)
+par(mfrw=c(2,2))
+plot(pam_2)
+plot(pam_3)
+plot(pam_4)
+plot(pam_5)
+```
+
+## **Una vez más obtenemos que, efectivamente, el número óptimo de clústeres es 2, por lo cual se puede afirmar que el modelo es correcto.**
+
+
